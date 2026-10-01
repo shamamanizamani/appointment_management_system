@@ -246,3 +246,137 @@ Errors: `401`, `403 FORBIDDEN` (any non-admin):
 ```json
 { "error": { "code": "FORBIDDEN", "message": "You don't have permission to do this." } }
 ```
+
+---
+
+## Organisation setup (Phase 2) — `STUB`
+
+> **`STUB`:** this contract is final in shape but **not implemented yet**. Examples are hand-written until the endpoints go live; then they get replaced with real responses and this marker is removed.
+
+### Access rules
+- **Public (no login):** browsing departments and services. Customers can browse before logging in.
+- **Manager:** only their own department (`user.department_id`). Touching another department → `403 FORBIDDEN`.
+- **Admin:** everything, every department.
+- Deleting departments and services is a **soft delete**: they become inactive and vanish from public lists, but history keeps pointing at them.
+- New error codes: `CODE_TAKEN` (409), `INVALID_REFERENCE` (422, e.g. a counter given a service from another department), `STAFF_ALREADY_ASSIGNED` (409), `UNKNOWN_RULE` (404), `INVALID_RULE_VALUE` (422).
+
+### Weekdays and times
+Weekdays are `"mon" "tue" "wed" "thu" "fri" "sat" "sun"`. Times of day are local department time, `"HH:MM:SS"`. Requests may send `"HH:MM"`.
+
+### Department object
+```json
+{
+  "id": 1,
+  "name": "Examination",
+  "code": "EXAM",
+  "timezone": "Asia/Karachi",
+  "working_hours": {
+    "mon": { "start": "09:00:00", "end": "17:00:00" },
+    "tue": { "start": "09:00:00", "end": "17:00:00" },
+    "wed": { "start": "09:00:00", "end": "17:00:00" },
+    "thu": { "start": "09:00:00", "end": "17:00:00" },
+    "fri": { "start": "09:00:00", "end": "17:00:00" },
+    "sat": null,
+    "sun": null
+  },
+  "break_windows": [
+    { "start": "13:00:00", "end": "14:00:00", "days": null }
+  ],
+  "active": true,
+  "created_at": "2026-10-01T08:00:00Z"
+}
+```
+`working_hours.<day> = null` means closed that day. A break with `"days": null` applies every working day; `"days": ["fri"]` applies on Fridays only.
+
+### Service object
+```json
+{
+  "id": 1,
+  "department_id": 1,
+  "name": "Document Verification",
+  "code": "A",
+  "description": null,
+  "average_duration_min": 10,
+  "is_priority": false,
+  "active_status": true,
+  "slot_config": { "slot_length_min": 30, "max_per_slot": 6, "daily_limit": null }
+}
+```
+`code` is the token prefix (`A` → `A-027`), 1–3 capital letters, unique within a department. `slot_config`: appointment slot length, bookings allowed per slot, and an optional cap per day (`null` = no cap).
+
+### Counter object
+```json
+{
+  "id": 1,
+  "department_id": 1,
+  "name": "Counter 1",
+  "service_ids": [1, 2],
+  "assigned_staff_id": 2,
+  "status": "available"
+}
+```
+`status`: `available` | `busy` | `break` | `closed`. New counters start `closed`; changing status is a staff action in Phase 5.
+
+### Shift object
+```json
+{ "id": 1, "staff_id": 2, "counter_id": 1, "weekday": "mon", "start_time": "09:00:00", "end_time": "17:00:00" }
+```
+
+### Endpoints
+
+| Method & path | Who | Body | Returns |
+|---|---|---|---|
+| `GET /departments` | public | | page of departments (active only) |
+| `GET /departments/{id}` | public | | department |
+| `POST /departments` | admin | `name, code, timezone?, working_hours?, break_windows?` | `201` department |
+| `PATCH /departments/{id}` | admin (any field) · manager (own: `working_hours`, `break_windows` only) | any department fields, `active` | department |
+| `DELETE /departments/{id}` | admin | | `204` (soft delete) |
+| `GET /departments/{id}/services` | public | | page of services (active only) |
+| `POST /departments/{id}/services` | manager (own) · admin | `name, code, average_duration_min, description?, is_priority?, slot_config?` | `201` service |
+| `GET /services?q=&department_id=` | public | | page of active services; `q` matches name, case-insensitive (§9 search) |
+| `GET /services/{id}` | public | | service |
+| `PATCH /services/{id}` | manager (own) · admin | any service fields, `active_status`, partial `slot_config` | service |
+| `DELETE /services/{id}` | manager (own) · admin | | `204` (soft delete) |
+| `GET /departments/{id}/counters` | staff/manager (own) · admin | | page of counters |
+| `POST /departments/{id}/counters` | manager (own) · admin | `name, service_ids?, assigned_staff_id?` | `201` counter |
+| `PATCH /counters/{id}` | manager (own) · admin | `name?, service_ids?, assigned_staff_id?` | counter |
+| `DELETE /counters/{id}` | manager (own) · admin | | `204` |
+| `GET /departments/{id}/staff` | manager (own) · admin | | page of users with role `staff` |
+| `POST /departments/{id}/staff` | manager (own) · admin | `name, email, password, phone?` | `201` user (role `staff`) |
+| `PATCH /departments/{id}/staff/{user_id}` | manager (own) · admin | `name?, phone?, account_status?` | user |
+| `GET /departments/{id}/shifts?staff_id=` | manager (own) · admin | | page of shifts |
+| `POST /departments/{id}/shifts` | manager (own) · admin | `staff_id, counter_id, weekday, start_time, end_time` | `201` shift |
+| `DELETE /shifts/{id}` | manager (own) · admin | | `204` |
+| `GET /rules?department_id=` | manager (own) · admin | | effective rules, see below |
+| `PUT /rules/{key}` | admin (org-wide: `department_id: null`) · manager (own department) | `{ "department_id": 1, "value": 3 }` | the rule |
+| `DELETE /rules/{key}?department_id=` | same as PUT | | `204` (back to org/default value) |
+| `GET /admin/users?role=&department_id=` | admin | | page of users (filters optional) |
+| `POST /admin/users` | admin | `name, email, password, role, phone?, department_id?` | `201` user |
+| `GET /admin/users/{id}` | admin | | user |
+| `PATCH /admin/users/{id}` | admin | `name?, phone?, role?, department_id?, account_status?, password?` | user |
+
+Users aren't deleted; suspend them with `account_status: "suspended"`.
+
+### Rules
+`GET /rules?department_id=1` returns the **effective** value of every rule for that department. A department override beats the org-wide value, which beats the default. Omit `department_id` to get org-wide values.
+```json
+{
+  "items": [
+    { "key": "max_appointments_per_user_per_day", "value": 2, "source": "default" },
+    { "key": "max_tokens_per_user", "value": 2, "source": "org" },
+    { "key": "cancellation_limit", "value": 1, "source": "department" }
+  ],
+  "total": 3
+}
+```
+
+| Key | Type | Default | Meaning |
+|---|---|---|---|
+| `max_appointments_per_user_per_day` | int ≥ 1 | 2 | Active appointments one customer can hold on one day |
+| `max_tokens_per_user` | int ≥ 1 | 2 | Active walk-in tokens one customer can hold at once (across services) |
+| `cancellation_limit` | int ≥ 0 | 3 | Cancellations a customer may make in 7 days |
+| `early_checkin_minutes` | int ≥ 0 | 10 | Check-in opens this many minutes before the slot |
+| `late_checkin_minutes` | int ≥ 0 | 10 | Check-in closes this many minutes after the slot starts |
+| `max_recalls` | int ≥ 0 | 2 | Recalls allowed before a no-show becomes `missed` |
+| `priority_services` | list of service ids | `[]` | These services' tokens are served first |
+| `booking_window_days` | int ≥ 1 | 14 | How many days ahead customers can book |
