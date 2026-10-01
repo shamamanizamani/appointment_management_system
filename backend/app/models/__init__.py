@@ -7,6 +7,14 @@ from app.models.department import Department
 from app.models.rule import Rule
 from app.models.service import Service, SlotConfig
 from app.models.staff_shift import StaffShift
+from app.models.token import (
+    QueueEvent,
+    QueueEventType,
+    Token,
+    TokenSequence,
+    TokenSource,
+    TokenStatus,
+)
 from app.models.user import AccountStatus, Role, User
 
 __all__ = [
@@ -18,11 +26,17 @@ __all__ = [
     "Counter",
     "CounterStatus",
     "Department",
+    "QueueEvent",
+    "QueueEventType",
     "Role",
     "Rule",
     "Service",
     "SlotConfig",
     "StaffShift",
+    "Token",
+    "TokenSequence",
+    "TokenSource",
+    "TokenStatus",
     "User",
     "counter_services",
 ]
