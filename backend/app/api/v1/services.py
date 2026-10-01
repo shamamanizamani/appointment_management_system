@@ -1,3 +1,5 @@
+from datetime import date
+
 from fastapi import APIRouter, Depends, Query, Response
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -5,9 +7,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.deps import check_department_access, get_db, require_role
 from app.core.errors import error_responses
 from app.models import Role, Service, User
+from app.schemas.appointment import AvailableDate, SlotGrid
 from app.schemas.common import Page
 from app.schemas.org import ServiceOut, ServiceUpdate
-from app.services import org
+from app.services import appointment_manager, org
 from app.utils.pagination import paginate
 
 router = APIRouter(prefix="/services", tags=["services"])
@@ -73,3 +76,34 @@ async def delete_service(
 ):
     await org.deactivate_service(db, user, await _service(db, service_id, user))
     return Response(status_code=204)
+
+
+@router.get(
+    "/{service_id}/slots",
+    response_model=SlotGrid,
+    summary="Appointment slot grid for one day (public, §5)",
+    responses=error_responses(404, 409, 422),
+)
+async def get_slots(
+    service_id: int,
+    date: date = Query(description="Department-local date, YYYY-MM-DD"),
+    db: AsyncSession = Depends(get_db),
+):
+    return await appointment_manager.slot_grid(db, await _service(db, service_id), date)
+
+
+@router.get(
+    "/{service_id}/available-dates",
+    response_model=Page[AvailableDate],
+    summary="Which days have free slots (public; defaults to the whole booking window)",
+    responses=error_responses(404, 409, 422),
+)
+async def get_available_dates(
+    service_id: int,
+    from_: date | None = Query(None, alias="from"),
+    to: date | None = None,
+    db: AsyncSession = Depends(get_db),
+):
+    service = await _service(db, service_id)
+    items = await appointment_manager.available_dates(db, service, from_, to)
+    return {"items": items, "total": len(items)}

@@ -1,4 +1,5 @@
 import os
+from datetime import UTC, datetime
 
 # Point the app at the test database before anything imports app.core.db.
 TEST_DB = os.environ.get(
@@ -6,6 +7,7 @@ TEST_DB = os.environ.get(
 )
 assert "test" in TEST_DB.rsplit("/", 1)[-1], "Refusing to run tests against a non-test database"
 os.environ["DATABASE_URL"] = TEST_DB
+os.environ["BCRYPT_ROUNDS"] = "4"  # minimum cost; hashing dominates test time otherwise
 
 import asyncpg  # noqa: E402
 import pytest  # noqa: E402
@@ -14,9 +16,10 @@ from sqlalchemy import text  # noqa: E402
 
 from app.core import time  # noqa: E402
 from app.core.db import SessionLocal, engine  # noqa: E402
-from app.core.security import hash_password  # noqa: E402
+from app.core.security import create_token, hash_password  # noqa: E402
 from app.main import app  # noqa: E402
-from app.models import Base, Role, User  # noqa: E402
+from app.models import Base, Department, Role, Service, SlotConfig, User  # noqa: E402
+from app.schemas.org import DEFAULT_BREAKS, DEFAULT_WORKING_HOURS  # noqa: E402
 
 PASSWORD = "Secret@123"
 
@@ -84,3 +87,62 @@ def login(client: AsyncClient):
         return {"Authorization": f"Bearer {r.json()['access_token']}"}
 
     return _login
+
+
+# --- booking fixtures (Phase 3+) ---
+
+# Monday 2026-10-05, 06:00 in Asia/Karachi (UTC+5): before opening, so the whole day is bookable.
+MONDAY_6AM = datetime(2026, 10, 5, 1, 0, tzinfo=UTC)
+
+
+@pytest.fixture
+def frozen():
+    """Freeze core.time.now() at MONDAY_6AM. clean_db unfreezes after each test."""
+    time._frozen = MONDAY_6AM
+    return MONDAY_6AM
+
+
+def bearer(user: User) -> dict:
+    """Auth headers without a login round-trip (fast for many users)."""
+    return {"Authorization": f"Bearer {create_token(user.id, 'access')}"}
+
+
+@pytest.fixture
+def make_service():
+    """A service (in a new 9-17 Mon-Fri department with a 13-14 break unless department_id
+    is given) with 30-minute slots."""
+
+    async def _make(
+        code: str = "A",
+        max_per_slot: int = 6,
+        daily_limit: int | None = None,
+        slot_length_min: int = 30,
+        department_id: int | None = None,
+    ) -> Service:
+        async with SessionLocal() as db:
+            if department_id is None:
+                dept = Department(
+                    name=f"Dept {code}",
+                    code=f"D{code}",
+                    working_hours=DEFAULT_WORKING_HOURS.model_dump(mode="json"),
+                    break_windows=[b.model_dump(mode="json") for b in DEFAULT_BREAKS],
+                )
+                db.add(dept)
+                await db.flush()
+                department_id = dept.id
+            service = Service(
+                department_id=department_id,
+                name=f"Service {code}",
+                code=code,
+                average_duration_min=10,
+                slot_config=SlotConfig(
+                    slot_length_min=slot_length_min,
+                    max_per_slot=max_per_slot,
+                    daily_limit=daily_limit,
+                ),
+            )
+            db.add(service)
+            await db.commit()
+            return service
+
+    return _make
