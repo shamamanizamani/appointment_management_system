@@ -20,6 +20,14 @@ Stable. These never change.
 | manager | `manager@demo.com` | `Demo@1234` |
 | admin | `admin@demo.com` | `Demo@1234` |
 
+`manager@demo.com` and `staff@demo.com` belong to **Examination** (department 1). Extra seeded accounts, same password:
+
+| Department | Manager | Staff |
+|---|---|---|
+| Examination | `manager@demo.com` | `staff@demo.com` (Counter 1), `staff2.exam@demo.com` (Counter 2) |
+| Student Affairs | `manager.sa@demo.com` | `staff1.sa@demo.com` (Counter 1), `staff2.sa@demo.com` (Counter 2) |
+| Accounts | `manager.acc@demo.com` | `staff1.acc@demo.com` (Counter 1), `staff2.acc@demo.com` (Counter 2) |
+
 ## Authentication
 
 Send the access token on every authenticated request:
@@ -249,9 +257,9 @@ Errors: `401`, `403 FORBIDDEN` (any non-admin):
 
 ---
 
-## Organisation setup (Phase 2) — `STUB`
+## Organisation setup (Phase 2)
 
-> **`STUB`:** this contract is final in shape but **not implemented yet**. Examples are hand-written until the endpoints go live; then they get replaced with real responses and this marker is removed.
+Live. Seeded data: departments **Examination** (`EXAM`, id 1), **Student Affairs** (`SA`, id 2), **Accounts** (`ACC`, id 3), with services A–F and counters as in brief §6. `manager@demo.com` and `staff@demo.com` belong to Examination.
 
 ### Access rules
 - **Public (no login):** browsing departments and services. Customers can browse before logging in.
@@ -283,7 +291,7 @@ Weekdays are `"mon" "tue" "wed" "thu" "fri" "sat" "sun"`. Times of day are local
     { "start": "13:00:00", "end": "14:00:00", "days": null }
   ],
   "active": true,
-  "created_at": "2026-10-01T08:00:00Z"
+  "created_at": "2026-10-01T08:04:17.146767Z"
 }
 ```
 `working_hours.<day> = null` means closed that day. A break with `"days": null` applies every working day; `"days": ["fri"]` applies on Fridays only.
@@ -307,11 +315,11 @@ Weekdays are `"mon" "tue" "wed" "thu" "fri" "sat" "sun"`. Times of day are local
 ### Counter object
 ```json
 {
-  "id": 1,
+  "id": 2,
   "department_id": 1,
-  "name": "Counter 1",
+  "name": "Counter 2",
   "service_ids": [1, 2],
-  "assigned_staff_id": 2,
+  "assigned_staff_id": 7,
   "status": "available"
 }
 ```
@@ -326,12 +334,12 @@ Weekdays are `"mon" "tue" "wed" "thu" "fri" "sat" "sun"`. Times of day are local
 
 | Method & path | Who | Body | Returns |
 |---|---|---|---|
-| `GET /departments` | public | | page of departments (active only) |
+| `GET /departments?include_inactive=` | public | | page of departments, ordered by name (active only unless `include_inactive=true`) |
 | `GET /departments/{id}` | public | | department |
 | `POST /departments` | admin | `name, code, timezone?, working_hours?, break_windows?` | `201` department |
 | `PATCH /departments/{id}` | admin (any field) · manager (own: `working_hours`, `break_windows` only) | any department fields, `active` | department |
 | `DELETE /departments/{id}` | admin | | `204` (soft delete) |
-| `GET /departments/{id}/services` | public | | page of services (active only) |
+| `GET /departments/{id}/services?include_inactive=` | public | | page of services, ordered by code (active only unless `include_inactive=true`) |
 | `POST /departments/{id}/services` | manager (own) · admin | `name, code, average_duration_min, description?, is_priority?, slot_config?` | `201` service |
 | `GET /services?q=&department_id=` | public | | page of active services; `q` matches name, case-insensitive (§9 search) |
 | `GET /services/{id}` | public | | service |
@@ -355,7 +363,73 @@ Weekdays are `"mon" "tue" "wed" "thu" "fri" "sat" "sun"`. Times of day are local
 | `GET /admin/users/{id}` | admin | | user |
 | `PATCH /admin/users/{id}` | admin | `name?, phone?, role?, department_id?, account_status?, password?` | user |
 
-Users aren't deleted; suspend them with `account_status: "suspended"`.
+Users aren't deleted; suspend them with `account_status: "suspended"`. When an admin changes a staff member's role or department, that person is taken off their counter and their shifts are removed.
+
+### Example requests and errors
+
+`POST /departments/1/services` as `manager@demo.com`:
+```json
+{ "name": "Transcript Request", "code": "T", "average_duration_min": 15, "slot_config": { "max_per_slot": 4 } }
+```
+`201`:
+```json
+{
+  "id": 6,
+  "department_id": 1,
+  "name": "Transcript Request",
+  "code": "T",
+  "description": null,
+  "average_duration_min": 15,
+  "is_priority": false,
+  "active_status": true,
+  "slot_config": { "slot_length_min": 30, "max_per_slot": 4, "daily_limit": null }
+}
+```
+
+`PATCH /services/6` (partial `slot_config`; omitted fields keep their values):
+```json
+{ "description": "Official transcript copies", "slot_config": { "daily_limit": 20 } }
+```
+`200`: the service, now with `"description": "Official transcript copies"` and `"slot_config": { "slot_length_min": 30, "max_per_slot": 4, "daily_limit": 20 }`.
+
+`POST /departments/1/counters`:
+```json
+{ "name": "Counter 4", "service_ids": [6] }
+```
+`201`:
+```json
+{ "id": 9, "department_id": 1, "name": "Counter 4", "service_ids": [6], "assigned_staff_id": null, "status": "closed" }
+```
+
+`PATCH /departments/1` as a manager, setting breaks (the Friday break is longer):
+```json
+{ "break_windows": [ { "start": "13:00", "end": "14:00" }, { "start": "12:30", "end": "14:30", "days": ["fri"] } ] }
+```
+`200`: the department, with
+```json
+"break_windows": [
+  { "start": "13:00:00", "end": "14:00:00", "days": null },
+  { "start": "12:30:00", "end": "14:30:00", "days": ["fri"] }
+]
+```
+
+`POST /admin/users`:
+```json
+{ "name": "Hina Staff", "email": "hina@demo.com", "password": "Secret@123", "role": "staff", "department_id": 3 }
+```
+`201`:
+```json
+{ "id": 14, "name": "Hina Staff", "email": "hina@demo.com", "phone": null, "role": "staff", "department_id": 3, "account_status": "active", "created_at": "2026-10-01T08:05:21.015183Z" }
+```
+
+Errors (all real):
+```json
+{ "error": { "code": "FORBIDDEN", "message": "You can only manage your own department." } }
+{ "error": { "code": "FORBIDDEN", "message": "Managers can only change working hours and breaks." } }
+{ "error": { "code": "FORBIDDEN", "message": "Only admins can change organisation-wide rules." } }
+{ "error": { "code": "INVALID_REFERENCE", "message": "Every service on a counter must belong to the counter's department." } }
+{ "error": { "code": "INVALID_RULE_VALUE", "message": "That isn't a valid value for 'max_recalls'." } }
+```
 
 ### Rules
 `GET /rules?department_id=1` returns the **effective** value of every rule for that department. A department override beats the org-wide value, which beats the default. Omit `department_id` to get org-wide values.
@@ -363,10 +437,15 @@ Users aren't deleted; suspend them with `account_status: "suspended"`.
 {
   "items": [
     { "key": "max_appointments_per_user_per_day", "value": 2, "source": "default" },
-    { "key": "max_tokens_per_user", "value": 2, "source": "org" },
-    { "key": "cancellation_limit", "value": 1, "source": "department" }
+    { "key": "max_tokens_per_user", "value": 2, "source": "default" },
+    { "key": "cancellation_limit", "value": 1, "source": "department" },
+    { "key": "early_checkin_minutes", "value": 10, "source": "default" },
+    { "key": "late_checkin_minutes", "value": 10, "source": "default" },
+    { "key": "max_recalls", "value": 2, "source": "default" },
+    { "key": "priority_services", "value": [], "source": "default" },
+    { "key": "booking_window_days", "value": 14, "source": "default" }
   ],
-  "total": 3
+  "total": 8
 }
 ```
 

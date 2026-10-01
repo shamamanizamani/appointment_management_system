@@ -14,19 +14,31 @@ Flutter app (Android APK) → HTTPS JSON API (`app/api/v1/*`) → business logic
 | `app/core/config.py` | Settings loaded from `.env` / environment variables. |
 | `app/core/db.py` | Async database engine and session factory. |
 | `app/core/security.py` | Password hashing (bcrypt) and JWT access/refresh tokens. |
-| `app/core/deps.py` | Request dependencies: `get_db`, `get_current_user`, `require_role(...)` (role-based access, §2). |
+| `app/core/deps.py` | Request dependencies: `get_db`, `get_current_user`, `require_role(...)` (role-based access, §2), `check_department_access` (managers/staff limited to their own department). |
 | `app/core/errors.py` | Uniform error responses `{"error": {"code", "message"}}`. |
 | `app/core/time.py` | `now()`: single source of the current time, so tests can freeze it. |
-| `app/models/` | Database tables, one file per entity (`user.py`). |
+| `app/models/` | Database tables, one file per entity: users, departments, services + slot_config, counters + counter_services, staff_shifts, rules, activity_logs. |
 | `app/schemas/` | Request/response shapes (validation, §10 input validation). |
 | `app/services/auth.py` | Registration, login, token refresh logic. |
+| `app/services/org.py` | Organisation setup: departments, services, counters, staff, shifts, user management. |
+| `app/services/rules_engine.py` | Organisation rules (§10) with department-over-org-over-default lookup. |
+| `app/services/activity.py` | Writes the activity log (§10 staff activity logs). |
 | `app/api/v1/auth.py` | Auth and profile endpoints (`/auth/*`, `/me`). |
-| `app/api/v1/admin.py` | Admin-only endpoints. |
+| `app/api/v1/departments.py` | Departments and everything inside one: services, counters, staff, shifts. |
+| `app/api/v1/services.py` | Service search (§9), view, update, deactivate. |
+| `app/api/v1/counters.py` | Counter update/delete, shift delete. |
+| `app/api/v1/rules.py` | Read and set organisation/department rules. |
+| `app/api/v1/admin.py` | Admin user management. |
+| `app/utils/pagination.py` | `{items, total}` list pages. |
 | `alembic/` | Database migrations. |
-| `scripts/seed.py` | Demo accounts, one per role. |
+| `scripts/seed.py` | Demo accounts for every role, plus a demo university: 3 departments, 5 services, counters, staff and shifts. |
 | `tests/` | Automated tests (pytest) against a separate test database. |
 | `Dockerfile` | Production image; runs migrations then the API. |
 
 ## Features → files
 
 - **Authentication & role-based access (§10):** `core/security.py`, `core/deps.py`, `services/auth.py`, `api/v1/auth.py`.
+- **Departments, services, counters, staff, shifts (§2, §5, §6):** `services/org.py`, `api/v1/departments.py`, `api/v1/services.py`, `api/v1/counters.py`.
+- **Organisation rules (§10):** `services/rules_engine.py`, `api/v1/rules.py`.
+- **Activity logs (§10):** `models/activity_log.py`, `services/activity.py`. Every create/update/delete writes a row in the same transaction.
+- **Service search (§9):** `GET /services?q=` in `api/v1/services.py`.
