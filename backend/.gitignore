@@ -1,0 +1,17 @@
+# Local-only planning files
+/CLAUDE.md
+/docs/BUILD_PLAN.md
+.claude/
+
+# Secrets
+.env
+*firebase-adminsdk*.json
+*service-account*.json
+*serviceAccount*.json
+
+# Python
+.venv/
+__pycache__/
+
+# Trained AI models
+/app/ai/artifacts/
