@@ -11,7 +11,7 @@ ALGORITHM = "HS256"
 
 
 def hash_password(password: str) -> str:
-    return bcrypt.hashpw(password.encode(), bcrypt.gensalt()).decode()
+    return bcrypt.hashpw(password.encode(), bcrypt.gensalt(settings.bcrypt_rounds)).decode()
 
 
 def verify_password(password: str, password_hash: str) -> bool:
@@ -31,10 +31,14 @@ def create_token(user_id: int, token_type: str) -> str:
 
 
 def decode_token(token: str, expected_type: str) -> int:
-    """Return the user id. Expiry is checked against core.time.now() so tests can freeze time."""
+    """Return the user id. Time claims are checked against core.time.now(), not the real clock,
+    so frozen time in tests works (PyJWT would otherwise reject a future iat)."""
     try:
         payload = jwt.decode(
-            token, settings.jwt_secret, algorithms=[ALGORITHM], options={"verify_exp": False}
+            token,
+            settings.jwt_secret,
+            algorithms=[ALGORITHM],
+            options={"verify_exp": False, "verify_iat": False},
         )
         user_id, exp = int(payload["sub"]), payload["exp"]
     except (jwt.InvalidTokenError, KeyError, ValueError) as e:

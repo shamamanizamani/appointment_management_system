@@ -9,6 +9,7 @@ class Settings(BaseSettings):
     jwt_secret: str = "dev-only-secret-change-me-in-production-0123456789"
     access_token_minutes: int = 30
     refresh_token_days: int = 7
+    bcrypt_rounds: int = 12  # tests lower this for speed
 
     @field_validator("database_url")
     @classmethod
