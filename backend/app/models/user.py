@@ -1,7 +1,7 @@
 from datetime import datetime
 from enum import StrEnum
 
-from sqlalchemy import DateTime, Enum, String
+from sqlalchemy import DateTime, Enum, ForeignKey, String
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.time import now
@@ -31,8 +31,10 @@ class User(Base):
     role: Mapped[Role] = mapped_column(
         Enum(Role, native_enum=False, create_constraint=True, length=20, name="role")
     )
-    # FK to departments is added in Phase 2 when that table exists.
-    department_id: Mapped[int | None]
+    # Staff and managers belong to one department; customers and admins have none.
+    department_id: Mapped[int | None] = mapped_column(
+        ForeignKey("departments.id", ondelete="SET NULL"), index=True
+    )
     account_status: Mapped[AccountStatus] = mapped_column(
         Enum(AccountStatus, native_enum=False, create_constraint=True, length=20, name="status"),
         default=AccountStatus.active,
