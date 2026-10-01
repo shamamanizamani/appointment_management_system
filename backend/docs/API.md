@@ -574,46 +574,49 @@ Real errors:
 { "error": { "code": "INVALID_TRANSITION", "message": "This appointment is already cancelled, so that isn't possible." } }
 ```
 
-## Walk-in tokens and queue (Phase 4) — `STUB`
+## Walk-in tokens and queue (Phase 4)
 
-> **`STUB`:** final in shape, **not implemented yet**. Examples are hand-written until the endpoints go live.
+Live. Every example below is a real response.
 
 ### How the queue works (brief §3, §4)
 - There is **one queue per service per day**. Counters serving that service all pull from it (Phase 5).
 - Token numbers are `{service code}-{001…}` and restart at `001` every day for each service, e.g. `A-001`, `A-002`.
 - Order of the waiting list: priority services first, then checked-in appointments due within 5 minutes, then everyone else by the time they joined.
 - `estimated_wait_min = ceil(people_ahead × average service minutes ÷ active counters)`. Average service minutes is the mean of the last 20 completed services today for that service, or the service's `average_duration_min` until there are any. Active counters are counters serving the service with status `available` or `busy` (at least 1).
+- The queue is open during the department's working hours for today (breaks included).
 - `people_ahead` and `estimated_wait_min` are recalculated on every read. Until live updates arrive (Phase 7), poll `GET /tokens/{id}` every 10 seconds.
 
 ### Token object
+Response of `POST /tokens` with `{ "service_id": 1 }` for the third customer in the Document Verification queue (`201`; counters 1 and 2 serve it, so 2 × 10 min ÷ 2 = 10):
 ```json
 {
-  "id": 3,
-  "token_number": "A-003",
+  "id": 6,
+  "token_number": "A-006",
   "service_id": 1,
   "service_name": "Document Verification",
   "service_code": "A",
   "department_id": 1,
   "department_name": "Examination",
-  "user_id": 1,
-  "customer_name": "Demo Customer",
+  "user_id": 24,
+  "customer_name": "Queue Tester 2",
   "source": "walk_in",
   "appointment_id": null,
   "status": "waiting",
   "priority": false,
   "recall_count": 0,
   "counter_id": null,
-  "queue_date": "2026-10-05",
+  "queue_date": "2026-10-01",
   "queue_position": 3,
   "people_ahead": 2,
-  "estimated_wait_min": 7,
+  "estimated_wait_min": 10,
   "current_token": null,
-  "created_at": "2026-10-05T05:00:00Z",
+  "created_at": "2026-10-01T08:51:29.623444Z",
   "called_at": null,
   "service_started_at": null,
   "completed_at": null
 }
 ```
+Cancelling returns the same object with `"status": "cancelled"` and `queue_position`, `people_ahead` and `estimated_wait_min` all `null`; everyone behind moves up one place.
 - `current_token`: the token most recently called for this service today (`null` until staff call someone, Phase 5).
 - `queue_position` (1 = next), `people_ahead` and `estimated_wait_min` are set only while `status` is `waiting`; otherwise `null`.
 - `source`: `walk_in` or `appointment` (created at check-in, Phase 6). `user_id` and `customer_name` can be `null` for kiosk walk-ins.
@@ -636,3 +639,11 @@ Real errors:
 | `LIMIT_REACHED` | 409 | Customer already holds `max_tokens_per_user` active tokens today (rule, default 2) |
 | `SERVICE_CLOSED` | 409 | Service or department inactive, or outside today's working hours |
 | `INVALID_TRANSITION` | 409 | e.g. cancelling a token that was already called or cancelled |
+
+Real errors:
+```json
+{ "error": { "code": "DUPLICATE_TOKEN", "message": "You already have a token for this service." } }
+{ "error": { "code": "LIMIT_REACHED", "message": "You can hold at most 2 tokens at once." } }
+{ "error": { "code": "SERVICE_CLOSED", "message": "This queue is closed right now. Please come back during opening hours." } }
+{ "error": { "code": "INVALID_TRANSITION", "message": "This token is already cancelled, so that isn't possible." } }
+```

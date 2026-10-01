@@ -2,6 +2,9 @@
 
 Newest first. Every breaking change (renamed/removed field, changed type or error code) gets an entry.
 
+## 2026-10-01 — Phase 4 live
+- Token and queue endpoints implemented; `STUB` removed. Shapes unchanged from the contract.
+
 ## 2026-10-01 — Phase 4 contract (STUB)
 - Added walk-in tokens and the queue: join, my active tokens, token detail with live position and estimate, cancel, staff waiting list. Not implemented yet.
 
