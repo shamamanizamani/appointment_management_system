@@ -459,3 +459,104 @@ Errors (all real):
 | `max_recalls` | int ≥ 0 | 2 | Recalls allowed before a no-show becomes `missed` |
 | `priority_services` | list of service ids | `[]` | These services' tokens are served first |
 | `booking_window_days` | int ≥ 1 | 14 | How many days ahead customers can book |
+
+---
+
+## Appointments (Phase 3) — `STUB`
+
+> **`STUB`:** final in shape, **not implemented yet**. Examples are hand-written until the endpoints go live.
+
+### Flow (brief §3)
+1. `GET /departments` → `GET /departments/{id}/services` (Phase 2)
+2. `GET /services/{id}/available-dates`: which days have free slots
+3. `GET /services/{id}/slots?date=`: the slot grid for one day
+4. `POST /appointments` with the chosen slot's `start` **exactly as returned** by `/slots`
+5. `GET /appointments/me`: upcoming and history; cancel or reschedule from there
+
+Booking needs a **customer** login. Browsing slots is public.
+
+### Slot grid: `GET /services/{id}/slots?date=2026-10-05`
+**Auth:** none. `date` is the department's local date (`YYYY-MM-DD`).
+```json
+{
+  "service_id": 1,
+  "date": "2026-10-05",
+  "timezone": "Asia/Karachi",
+  "slot_length_min": 30,
+  "daily_limit": null,
+  "booked_total": 9,
+  "slots": [
+    { "start": "2026-10-05T04:00:00Z", "end": "2026-10-05T04:30:00Z", "local_start": "09:00", "local_end": "09:30", "max": 6, "booked": 6, "status": "full" },
+    { "start": "2026-10-05T04:30:00Z", "end": "2026-10-05T05:00:00Z", "local_start": "09:30", "local_end": "10:00", "max": 6, "booked": 3, "status": "available" }
+  ]
+}
+```
+- `status`: `available` | `full` | `past` (already started).
+- `start`/`end` are UTC. `local_start`/`local_end` are ready to display in the department's timezone.
+- Slots come from the department's working hours minus its breaks, cut into the service's `slot_length_min` (§5). There are no slots over a break, and a non-working day returns `"slots": []`.
+- When the service's `daily_limit` is reached, every slot that day shows `full`.
+- Errors: `404`, `409 SERVICE_CLOSED` (service or department inactive), `422 OUTSIDE_BOOKING_WINDOW` (date in the past or more than `booking_window_days` ahead).
+
+### `GET /services/{id}/available-dates?from=2026-10-05&to=2026-10-11`
+**Auth:** none. Defaults run from today to the end of the booking window, with at most 31 days per call.
+```json
+{
+  "items": [
+    { "date": "2026-10-05", "available_slots": 12, "status": "available" },
+    { "date": "2026-10-10", "available_slots": 0, "status": "closed" },
+    { "date": "2026-10-12", "available_slots": 0, "status": "full" }
+  ],
+  "total": 3
+}
+```
+`status`: `available` | `full` | `closed` (not a working day).
+
+### Appointment object
+```json
+{
+  "id": 7,
+  "appointment_number": "APT-000007",
+  "user_id": 1,
+  "customer_name": "Demo Customer",
+  "customer_phone": null,
+  "service_id": 1,
+  "service_name": "Document Verification",
+  "service_code": "A",
+  "department_id": 1,
+  "department_name": "Examination",
+  "appointment_date": "2026-10-05",
+  "start_time": "2026-10-05T04:30:00Z",
+  "end_time": "2026-10-05T05:00:00Z",
+  "status": "confirmed",
+  "check_in_time": null,
+  "cancelled_at": null,
+  "rescheduled_from_id": null,
+  "created_at": "2026-10-01T09:00:00Z"
+}
+```
+`status` (brief §3): `booked` → `confirmed` → `checked_in` → `waiting` → `in_service` → `completed`. Other statuses: `cancelled`, `missed`, `rescheduled`, `delayed`. New bookings are confirmed at once. Any other move returns `409 INVALID_TRANSITION`.
+
+### Endpoints
+
+| Method & path | Who | Body / params | Returns |
+|---|---|---|---|
+| `POST /appointments` | customer | `{ "service_id": 1, "start": "2026-10-05T04:30:00Z" }` | `201` appointment |
+| `GET /appointments/me?when=&status=` | customer | `when`: `upcoming` \| `past` \| `all` (default `all`); `status` optional | page of own appointments (upcoming soonest first; otherwise newest first) |
+| `GET /appointments/{id}` | the customer who booked it · staff/manager of its department · admin | | appointment |
+| `POST /appointments/{id}/cancel` | the customer · manager of its department · admin | | appointment (`cancelled`) |
+| `POST /appointments/{id}/reschedule` | the customer · manager of its department · admin | `{ "start": "2026-10-06T05:00:00Z" }` (same service) | `201` the **new** appointment; the old one becomes `rescheduled` and the new one has `rescheduled_from_id` |
+| `GET /appointments?department_id=&service_id=&date=&status=` | staff/manager (own department, the default) · admin | all filters optional | page of appointments, by start time |
+
+### Booking rules and errors
+| Code | HTTP | When |
+|---|---|---|
+| `SLOT_FULL` | 409 | Slot has reached `max_per_slot`, or the service hit its `daily_limit` that day |
+| `DUPLICATE_APPOINTMENT` | 409 | Customer already has an active appointment for this service that day |
+| `LIMIT_REACHED` | 409 | Over `max_appointments_per_user_per_day`, or (on cancel) over `cancellation_limit` in the last 7 days |
+| `OUTSIDE_WORKING_HOURS` | 422 | `start` isn't the start of one of that day's slots |
+| `OUTSIDE_BOOKING_WINDOW` | 422 | Date is in the past or beyond `booking_window_days` |
+| `SLOT_PASSED` | 422 | The slot already started |
+| `SERVICE_CLOSED` | 409 | Service or department is inactive |
+| `INVALID_TRANSITION` | 409 | e.g. cancelling a completed or already-cancelled appointment |
+
+Cancelling or rescheduling frees the old slot immediately. Cancellations by a manager or admin don't count toward the customer's `cancellation_limit`.

@@ -2,6 +2,9 @@
 
 Newest first. Every breaking change (renamed/removed field, changed type or error code) gets an entry.
 
+## 2026-10-01 — Phase 3 contract (STUB)
+- Added the appointments contract: slot grid, available dates, book, my appointments, cancel, reschedule, staff/manager list. Not implemented yet.
+
 ## 2026-10-01 — Phase 2 live
 - All organisation setup endpoints are implemented; the `STUB` marker is removed. Shapes unchanged from the contract.
 - Additive: `include_inactive` query param on `GET /departments` and `GET /departments/{id}/services`.
