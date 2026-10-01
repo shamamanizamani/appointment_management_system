@@ -10,11 +10,13 @@ from app.models import Role, Service, User
 from app.schemas.appointment import AvailableDate, SlotGrid
 from app.schemas.common import Page
 from app.schemas.org import ServiceOut, ServiceUpdate
-from app.services import appointment_manager, org
+from app.schemas.token import TokenOut
+from app.services import appointment_manager, org, queue_manager
 from app.utils.pagination import paginate
 
 router = APIRouter(prefix="/services", tags=["services"])
 manager_or_admin = require_role(Role.manager, Role.admin)
+dept_member = require_role(Role.staff, Role.manager, Role.admin)
 
 
 async def _service(db: AsyncSession, service_id: int, user: User | None = None) -> Service:
@@ -107,3 +109,20 @@ async def get_available_dates(
     service = await _service(db, service_id)
     items = await appointment_manager.available_dates(db, service, from_, to)
     return {"items": items, "total": len(items)}
+
+
+@router.get(
+    "/{service_id}/queue",
+    response_model=Page[TokenOut],
+    summary="Today's waiting list in call order (staff/manager of its department, admin)",
+    responses=error_responses(401, 403, 404),
+)
+async def get_queue(
+    service_id: int, user: User = Depends(dept_member), db: AsyncSession = Depends(get_db)
+):
+    service = await _service(db, service_id, user)
+    tokens = await queue_manager.recalculate_queue(db, service)
+    current = await queue_manager.current_token(db, service)
+    for t in tokens:
+        t.current_token = current
+    return {"items": tokens, "total": len(tokens)}
