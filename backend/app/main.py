@@ -3,7 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.v1 import admin, auth
+from app.api.v1 import admin, auth, counters, departments, rules, services
 from app.core.deps import get_db
 from app.core.errors import register_error_handlers
 from app.core.time import now
@@ -14,7 +14,7 @@ app = FastAPI(title="Digital Queue & Appointment API", version="0.1.0")
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
 register_error_handlers(app)
 
-for module in (auth, admin):
+for module in (auth, departments, services, counters, rules, admin):
     app.include_router(module.router, prefix="/api/v1")
 
 

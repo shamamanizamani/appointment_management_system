@@ -31,6 +31,12 @@ async def get_current_user(
     return user
 
 
+def check_department_access(user: User, department_id: int) -> None:
+    """Admins reach every department; managers and staff only their own (CLAUDE.md §4)."""
+    if user.role != Role.admin and user.department_id != department_id:
+        raise AppError(403, "FORBIDDEN", "You can only manage your own department.")
+
+
 def require_role(*roles: Role):
     async def check(user: User = Depends(get_current_user)) -> User:
         if user.role not in roles:

@@ -6,6 +6,7 @@ from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
+from sqlalchemy.exc import IntegrityError
 from starlette.exceptions import HTTPException
 
 log = logging.getLogger(__name__)
@@ -23,6 +24,11 @@ class ErrorBody(BaseModel):
 
 class ErrorResponse(BaseModel):
     error: ErrorBody
+
+
+def error_responses(*statuses: int) -> dict:
+    """OpenAPI `responses=` entries so /docs shows the error shape."""
+    return {s: {"model": ErrorResponse} for s in statuses}
 
 
 def _error(status: int, code: str, message: str, **extra) -> JSONResponse:
@@ -55,6 +61,12 @@ def register_error_handlers(app: FastAPI) -> None:
         first = fields[0]
         message = f"{first['field']}: {first['message']}" if first["field"] else first["message"]
         return _error(422, "VALIDATION_ERROR", message, fields=fields)
+
+    @app.exception_handler(IntegrityError)
+    async def integrity_error(_: Request, e: IntegrityError):
+        # Backstop for races the friendly pre-checks in services/ can't catch.
+        log.warning("Integrity error: %s", e.orig)
+        return _error(409, "CONFLICT", "This conflicts with existing data. Please try again.")
 
     @app.exception_handler(Exception)
     async def unhandled(_: Request, e: Exception):
