@@ -3,7 +3,8 @@
 The Flutter app's source of truth. Every example below was copied from a real response.
 Interactive docs: `<base-url>/docs` (Swagger). Changes are listed in `API_CHANGELOG.md`.
 
-- **Base URL:** `https://<deployed-url>` (TBD after first deploy). Local: `http://localhost:8000`.
+- **Base URL:** `https://queue-api-m3n4.onrender.com` (Swagger: `/docs`). Local: `http://localhost:8000`.
+- Free hosting sleeps after 15 min idle; the first request after that can take ~1 min. Hit `/health` to wake it.
 - All endpoints except `/health` are under **`/api/v1`**.
 - JSON in, JSON out. Timestamps are ISO 8601 in **UTC** (`...Z` / `+00:00`); convert to local time in the app.
 - Lists: `?limit=&offset=` → `{"items": [...], "total": n}`.
