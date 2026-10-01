@@ -2,6 +2,8 @@
 
 Feeds the submission explanation document (brief §12).
 
+**Build status:** phases 1–4 of the plan are implemented (auth, organisation setup, appointments, walk-in queue). Staff workflow, notifications, realtime, analytics and AI are not built yet.
+
 ## How the parts connect
 
 Flutter app (Android APK) → HTTPS JSON API (`app/api/v1/*`) → business logic (`app/services/*`) → PostgreSQL (via SQLAlchemy models in `app/models/*`).

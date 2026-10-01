@@ -8,6 +8,7 @@ Interactive docs: `<base-url>/docs` (Swagger). Changes are listed in `API_CHANGE
 - All endpoints except `/health` are under **`/api/v1`**.
 - JSON in, JSON out. Timestamps are ISO 8601 in **UTC** (`...Z` / `+00:00`); convert to local time in the app.
 - Lists: `?limit=&offset=` → `{"items": [...], "total": n}`.
+- **Live now:** Phases 1–4 (auth, organisation setup, appointments, walk-in tokens + queue). **Next:** Phase 5, staff workflow and counters (call next, start, complete, skip, recall, miss, counter status). Sections without a `STUB` marker are implemented.
 
 ## Demo accounts
 
