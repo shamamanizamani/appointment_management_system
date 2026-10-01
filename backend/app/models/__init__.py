@@ -1,5 +1,6 @@
 # Import every model here so Base.metadata (Alembic, tests) sees all tables.
 from app.models.activity_log import ActivityLog
+from app.models.appointment import Appointment, AppointmentStatus
 from app.models.base import Base
 from app.models.counter import Counter, CounterStatus, counter_services
 from app.models.department import Department
@@ -11,6 +12,8 @@ from app.models.user import AccountStatus, Role, User
 __all__ = [
     "AccountStatus",
     "ActivityLog",
+    "Appointment",
+    "AppointmentStatus",
     "Base",
     "Counter",
     "CounterStatus",

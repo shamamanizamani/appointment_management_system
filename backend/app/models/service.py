@@ -18,6 +18,7 @@ class Service(Base):
     active_status: Mapped[bool] = mapped_column(default=True)
 
     slot_config: Mapped["SlotConfig"] = relationship(lazy="selectin", cascade="all, delete-orphan")
+    department: Mapped["Department"] = relationship(lazy="selectin")  # noqa: F821
 
 
 class SlotConfig(Base):
