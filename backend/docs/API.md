@@ -462,9 +462,9 @@ Errors (all real):
 
 ---
 
-## Appointments (Phase 3) — `STUB`
+## Appointments (Phase 3)
 
-> **`STUB`:** final in shape, **not implemented yet**. Examples are hand-written until the endpoints go live.
+Live. Every example below is a real response.
 
 ### Flow (brief §3)
 1. `GET /departments` → `GET /departments/{id}/services` (Phase 2)
@@ -475,19 +475,20 @@ Errors (all real):
 
 Booking needs a **customer** login. Browsing slots is public.
 
-### Slot grid: `GET /services/{id}/slots?date=2026-10-05`
-**Auth:** none. `date` is the department's local date (`YYYY-MM-DD`).
+### Slot grid: `GET /services/{id}/slots?date=2026-10-02`
+**Auth:** none. `date` is the department's local date (`YYYY-MM-DD`). Real response, first 3 of 14 slots:
 ```json
 {
   "service_id": 1,
-  "date": "2026-10-05",
+  "date": "2026-10-02",
   "timezone": "Asia/Karachi",
   "slot_length_min": 30,
   "daily_limit": null,
-  "booked_total": 9,
+  "booked_total": 6,
   "slots": [
-    { "start": "2026-10-05T04:00:00Z", "end": "2026-10-05T04:30:00Z", "local_start": "09:00", "local_end": "09:30", "max": 6, "booked": 6, "status": "full" },
-    { "start": "2026-10-05T04:30:00Z", "end": "2026-10-05T05:00:00Z", "local_start": "09:30", "local_end": "10:00", "max": 6, "booked": 3, "status": "available" }
+    { "start": "2026-10-02T04:00:00Z", "end": "2026-10-02T04:30:00Z", "local_start": "09:00", "local_end": "09:30", "max": 6, "booked": 0, "status": "available" },
+    { "start": "2026-10-02T04:30:00Z", "end": "2026-10-02T05:00:00Z", "local_start": "09:30", "local_end": "10:00", "max": 6, "booked": 0, "status": "available" },
+    { "start": "2026-10-02T05:00:00Z", "end": "2026-10-02T05:30:00Z", "local_start": "10:00", "local_end": "10:30", "max": 6, "booked": 6, "status": "full" }
   ]
 }
 ```
@@ -497,21 +498,23 @@ Booking needs a **customer** login. Browsing slots is public.
 - When the service's `daily_limit` is reached, every slot that day shows `full`.
 - Errors: `404`, `409 SERVICE_CLOSED` (service or department inactive), `422 OUTSIDE_BOOKING_WINDOW` (date in the past or more than `booking_window_days` ahead).
 
-### `GET /services/{id}/available-dates?from=2026-10-05&to=2026-10-11`
+### `GET /services/{id}/available-dates?from=2026-10-02&to=2026-10-05`
 **Auth:** none. Defaults run from today to the end of the booking window, with at most 31 days per call.
 ```json
 {
   "items": [
-    { "date": "2026-10-05", "available_slots": 12, "status": "available" },
-    { "date": "2026-10-10", "available_slots": 0, "status": "closed" },
-    { "date": "2026-10-12", "available_slots": 0, "status": "full" }
+    { "date": "2026-10-02", "available_slots": 14, "status": "available" },
+    { "date": "2026-10-03", "available_slots": 0, "status": "closed" },
+    { "date": "2026-10-04", "available_slots": 0, "status": "closed" },
+    { "date": "2026-10-05", "available_slots": 14, "status": "available" }
   ],
-  "total": 3
+  "total": 4
 }
 ```
 `status`: `available` | `full` | `closed` (not a working day).
 
 ### Appointment object
+Response of `POST /appointments` with `{ "service_id": 1, "start": "2026-10-02T06:00:00Z" }` as `customer@demo.com` (`201`):
 ```json
 {
   "id": 7,
@@ -524,16 +527,17 @@ Booking needs a **customer** login. Browsing slots is public.
   "service_code": "A",
   "department_id": 1,
   "department_name": "Examination",
-  "appointment_date": "2026-10-05",
-  "start_time": "2026-10-05T04:30:00Z",
-  "end_time": "2026-10-05T05:00:00Z",
+  "appointment_date": "2026-10-02",
+  "start_time": "2026-10-02T06:00:00Z",
+  "end_time": "2026-10-02T06:30:00Z",
   "status": "confirmed",
   "check_in_time": null,
   "cancelled_at": null,
   "rescheduled_from_id": null,
-  "created_at": "2026-10-01T09:00:00Z"
+  "created_at": "2026-10-01T08:34:59.866543Z"
 }
 ```
+Rescheduling it with `{ "start": "2026-10-05T04:30:00Z" }` returns the new appointment (`201`): `"id": 8`, `"appointment_number": "APT-000008"`, `"appointment_date": "2026-10-05"`, `"start_time": "2026-10-05T04:30:00Z"`, `"status": "confirmed"`, `"rescheduled_from_id": 7`. Appointment 7 now has `"status": "rescheduled"`. Cancelling returns the appointment with `"status": "cancelled"` and `"cancelled_at": "2026-10-01T08:34:59.968951Z"`.
 `status` (brief §3): `booked` → `confirmed` → `checked_in` → `waiting` → `in_service` → `completed`. Other statuses: `cancelled`, `missed`, `rescheduled`, `delayed`. New bookings are confirmed at once. Any other move returns `409 INVALID_TRANSITION`.
 
 ### Endpoints
@@ -559,4 +563,13 @@ Booking needs a **customer** login. Browsing slots is public.
 | `SERVICE_CLOSED` | 409 | Service or department is inactive |
 | `INVALID_TRANSITION` | 409 | e.g. cancelling a completed or already-cancelled appointment |
 
-Cancelling or rescheduling frees the old slot immediately. Cancellations by a manager or admin don't count toward the customer's `cancellation_limit`.
+Cancelling or rescheduling frees the old slot immediately. Cancellations by a manager or admin don't count toward the customer's `cancellation_limit`. `GET /appointments/me` lists every status, including `rescheduled` and `cancelled` ones; filter with `status=` if needed.
+
+Real errors:
+```json
+{ "error": { "code": "SLOT_FULL", "message": "This slot is full. Please pick another time." } }
+{ "error": { "code": "SLOT_FULL", "message": "This service is fully booked that day." } }
+{ "error": { "code": "DUPLICATE_APPOINTMENT", "message": "You already have an appointment for this service that day." } }
+{ "error": { "code": "OUTSIDE_WORKING_HOURS", "message": "That time isn't one of this service's slots." } }
+{ "error": { "code": "INVALID_TRANSITION", "message": "This appointment is already cancelled, so that isn't possible." } }
+```

@@ -2,6 +2,10 @@
 
 Newest first. Every breaking change (renamed/removed field, changed type or error code) gets an entry.
 
+## 2026-10-01 — Phase 3 live
+- Appointment endpoints implemented; `STUB` removed. Shapes unchanged from the contract.
+- `INVALID_TRANSITION` messages are now user-readable ("This appointment is already cancelled, so that isn't possible."). The code is unchanged.
+
 ## 2026-10-01 — Phase 3 contract (STUB)
 - Added the appointments contract: slot grid, available dates, book, my appointments, cancel, reschedule, staff/manager list. Not implemented yet.
 
