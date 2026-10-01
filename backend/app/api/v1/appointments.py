@@ -4,7 +4,7 @@ from typing import Literal
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.deps import check_department_access, get_db, require_role
+from app.core.deps import check_department_access, check_owner_access, get_db, require_role
 from app.core.errors import error_responses
 from app.models import Appointment, AppointmentStatus, Role, User
 from app.schemas.appointment import AppointmentOut, BookIn, RescheduleIn
@@ -23,7 +23,7 @@ canceller = require_role(Role.customer, Role.manager, Role.admin)
 
 async def _appointment(db: AsyncSession, appointment_id: int, user: User, manage: bool = False):
     appt = await org.get_or_404(db, Appointment, appointment_id, "Appointment")
-    am.check_access(user, appt, manage)
+    check_owner_access(user, appt, "Appointment", manage)
     return appt
 
 

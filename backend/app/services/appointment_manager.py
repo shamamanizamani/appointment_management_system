@@ -76,22 +76,22 @@ def _tz(service: Service) -> ZoneInfo:
     return ZoneInfo(service.department.timezone)
 
 
-def _local_today(service: Service) -> date:
+def local_today(service: Service) -> date:
     return clock.now().astimezone(_tz(service)).date()
 
 
-def _check_open(service: Service) -> None:
+def check_open(service: Service) -> None:
     if not service.active_status or not service.department.active:
         raise AppError(409, "SERVICE_CLOSED", "This service isn't taking bookings right now.")
 
 
 async def _window_end(db: AsyncSession, service: Service) -> date:
     days = await rules_engine.get(db, "booking_window_days", service.department_id)
-    return _local_today(service) + timedelta(days=days)
+    return local_today(service) + timedelta(days=days)
 
 
 async def _check_window(db: AsyncSession, service: Service, day: date) -> None:
-    if not _local_today(service) <= day <= await _window_end(db, service):
+    if not local_today(service) <= day <= await _window_end(db, service):
         days = await rules_engine.get(db, "booking_window_days", service.department_id)
         raise AppError(
             422, "OUTSIDE_BOOKING_WINDOW", f"You can book from today up to {days} days ahead."
@@ -146,7 +146,7 @@ def _build_slots(service: Service, day: date, counts: dict[datetime, int]) -> li
 
 
 async def slot_grid(db: AsyncSession, service: Service, day: date) -> dict:
-    _check_open(service)
+    check_open(service)
     await _check_window(db, service, day)
     slots = _build_slots(service, day, await _booked_counts(db, service.id, day, day))
     return {
@@ -163,8 +163,8 @@ async def slot_grid(db: AsyncSession, service: Service, day: date) -> dict:
 async def available_dates(
     db: AsyncSession, service: Service, first: date | None, last: date | None
 ) -> list[dict]:
-    _check_open(service)
-    first = first or _local_today(service)
+    check_open(service)
+    first = first or local_today(service)
     last = last or await _window_end(db, service)
     if (last - first).days >= MAX_DATE_RANGE_DAYS or last < first:
         raise AppError(
@@ -198,7 +198,7 @@ async def _lock(db: AsyncSession, user_id: int, service_id: int) -> Service:
 
 async def _place(db: AsyncSession, user: User, service: Service, start: datetime) -> Appointment:
     """Validate and insert one appointment. Caller holds the locks from _lock()."""
-    _check_open(service)
+    check_open(service)
     start = start.astimezone(UTC)
     day = start.astimezone(_tz(service)).date()
     await _check_window(db, service, day)
@@ -290,17 +290,6 @@ async def cancel(db: AsyncSession, actor: User, appt: Appointment) -> Appointmen
 
 
 # --- access and listing ---
-
-
-def check_access(user: User, appt: Appointment, manage: bool = False) -> None:
-    """Customers: own only (404 otherwise, so ids don't leak). Staff/managers: own department;
-    staff can view but not cancel/reschedule. Admins: everything."""
-    if user.role == Role.customer:
-        if appt.user_id != user.id:
-            raise AppError(404, "NOT_FOUND", "Appointment not found.")
-    elif user.role != Role.admin:
-        if user.department_id != appt.department_id or (manage and user.role == Role.staff):
-            raise AppError(403, "FORBIDDEN", "You don't have permission to do this.")
 
 
 def mine_query(user: User, when: str, status: S | None) -> Select:

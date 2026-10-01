@@ -37,6 +37,18 @@ def check_department_access(user: User, department_id: int) -> None:
         raise AppError(403, "FORBIDDEN", "You can only manage your own department.")
 
 
+def check_owner_access(user: User, obj, label: str, manage: bool = False) -> None:
+    """For a customer-owned record with user_id and department_id (appointment, token).
+    Customers: own only (404 otherwise, so ids don't leak). Staff/managers: own department;
+    staff can view but not cancel/reschedule. Admins: everything."""
+    if user.role == Role.customer:
+        if obj.user_id != user.id:
+            raise AppError(404, "NOT_FOUND", f"{label} not found.")
+    elif user.role != Role.admin:
+        if user.department_id != obj.department_id or (manage and user.role == Role.staff):
+            raise AppError(403, "FORBIDDEN", "You don't have permission to do this.")
+
+
 def require_role(*roles: Role):
     async def check(user: User = Depends(get_current_user)) -> User:
         if user.role not in roles:
